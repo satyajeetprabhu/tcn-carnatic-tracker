@@ -1,0 +1,12 @@
+# This file may be used to create an environment using:
+# $ conda create --name <env> --file <this file>
+# platform: osx-arm64
+# python==3.10
+madmom
+torch==2.5.1
+lightning
+git+https://github.com/satyajeetprabhu/mirdata-indexed.git
+mir_eval
+numpy==1.23.5
+matplotlib
+wandb

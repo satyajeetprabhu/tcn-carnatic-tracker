@@ -1,0 +1,28 @@
+# Model Parameters
+model:
+  n_filters: 20
+  kernel_size: 5
+  dropout: 0.15
+  n_dilations: 11
+
+# Training Configuration
+training:
+  learning_rate: 0.005
+  n_epochs: 100
+  loss: "BCE"
+  post_processor: "JOINT"
+  batch_size: 1
+  num_workers: 0
+  
+  # Early stopping
+  early_stop_patience: 20
+  early_stop_min_delta: 0.0001
+  
+  # Data splits
+  test_size: 0.2
+
+# Experiment Tracking
+experiment:
+  project_name: "TCN_BL"
+  wandb_api_key: "40ce66ff8d453431f4c75ca162a50b37f7f0f1e1"
+  ckpt_name: "tcn_bl"
