@@ -126,8 +126,8 @@ num_workers = PARAMS['NUM_WORKERS']
 # ----- Set seeds -----
 #for run, seed in enumerate([42, 52, 62], start=1):
 
-seed = 42
-run = 1
+seed = 52
+run = 2
 
 # Set random seed for reproducibility
 random.seed(seed)
@@ -214,7 +214,7 @@ wandb_run = wandb.init(
     project=PARAMS["PROJECT_NAME"],
     name=f"{PARAMS['PROJECT_NAME']}_{timestamp}_run{run}_seed{seed}",
     config=run_config,
-    reinit='finish_previous',
+    reinit='create_new',
     mode="disabled" if args.disable_wandb else "online",
     
 )
