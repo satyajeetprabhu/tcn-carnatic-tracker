@@ -112,7 +112,6 @@ for name, stats in summary.items():
         print(f"{name}: {stats['valid_tracks']}/{stats['total_tracks']} "
               f"({stats['valid_ratio']:.2%} valid)")
 
-'''
 
 # ----- Device Setup -----
 if torch.cuda.is_available():
@@ -265,4 +264,3 @@ for run, seed in enumerate([42, 52, 62], start=1):
         wandb_run.finish()
         print("Wandb run finished")
         
-'''
