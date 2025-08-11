@@ -12,12 +12,16 @@ training:
   loss: "BCE"
   post_processor: "JOINT"
   batch_size: 1
-  num_workers: 0
+  num_workers: 4
   
   # Early stopping
   early_stop_patience: 20
   early_stop_min_delta: 0.0001
-  
+
+  # Learning rate scheduler
+  scheduler_factor: 0.2
+  scheduler_patience: 10
+
   # Data splits
   test_size: 0.2
 
