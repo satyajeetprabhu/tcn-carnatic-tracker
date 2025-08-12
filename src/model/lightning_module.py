@@ -25,6 +25,8 @@ class PLTCN(L.LightningModule):
         #self.downbeat_fmeasure = []
         self.all_results = []
         self.learning_rate = params["LEARNING_RATE"]
+        self.scheduler_factor = params["SCHEDULER_FACTOR"]
+        self.scheduler_patience = params["SCHEDULER_PATIENCE"]
         self.post_processor = params["POST_PROCESSOR"]
         self.post_tracker = self._get_post_processor()
         self.train_start_time = None
@@ -110,8 +112,13 @@ class PLTCN(L.LightningModule):
         optimizer = torch.optim.RAdam(self.parameters(), lr=self.learning_rate)
         scheduler = {
                 "scheduler": torch.optim.lr_scheduler.ReduceLROnPlateau(
-                    optimizer, mode="min", factor=0.2, patience=5,
-                    threshold=1e-4, cooldown=0, min_lr=1e-7
+                    optimizer,
+                    mode="min", 
+                    factor=self.scheduler_factor, 
+                    patience=self.scheduler_patience,
+                    threshold=1e-4, 
+                    cooldown=0, 
+                    min_lr=1e-7
                 ),
                 "monitor": "val_loss",
                 "interval": "epoch",            

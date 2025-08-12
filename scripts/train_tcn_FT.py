@@ -3,6 +3,8 @@ import sys
 import shutil
 from datetime import datetime
 import time
+import argparse
+import yaml
 
 ROOT = os.path.abspath(os.path.join(os.getcwd(), '..'))
 SRC = os.path.join(ROOT, 'src')
@@ -25,14 +27,68 @@ from utils.split_utils import carn_split_keys
 import numpy as np
 import random
 
+# ----- Argument Parsing and Configuration -----
+
+parser = argparse.ArgumentParser(description='Finetune TCN model on Carnatic Music Rhythm (CMR) dataset')
+parser.add_argument('--data_home', type=str, default='../data/',
+                    help='Path to the mounted datasets directory')
+parser.add_argument('--disable-wandb', action='store_true',
+                    help='Disable WandB logging')
+args = parser.parse_args()
+
+# Verify the data_home exists
+data_home = args.data_home
+if not os.path.exists(data_home):
+    raise FileNotFoundError(f"Data home directory not found: {data_home}")
+
+# Load configuration
+with open('config/train_FT.yaml', 'r') as f:
+    config = yaml.safe_load(f)
+    
+print(f"Using data home: {data_home}")
+print(f"Using config file: config/train_FT.yaml")
+
+# ----- Set Training Parameters -----
+
+PARAMS = {
+    # Model parameters
+    "LEARNING_RATE": config['training']['learning_rate'],
+    "N_FILTERS": config['model']['n_filters'],
+    "KERNEL_SIZE": config['model']['kernel_size'],
+    "DROPOUT": config['model']['dropout'],
+    "N_DILATIONS": config['model']['n_dilations'],
+    "N_EPOCHS": config['training']['n_epochs'],
+    "LOSS": config['training']['loss'],
+    "POST_PROCESSOR": config['training']['post_processor'],
+    
+    # Training configuration
+    "BATCH_SIZE": config['training']['batch_size'],
+    "NUM_WORKERS": config['training']['num_workers'],
+    "EARLY_STOP_PATIENCE": config['training']['early_stop_patience'],
+    "EARLY_STOP_MIN_DELTA": config['training']['early_stop_min_delta'],
+    "SCHEDULER_FACTOR": config['training']['scheduler_factor'],
+    "SCHEDULER_PATIENCE": config['training']['scheduler_patience'],
+    "TEST_SIZE": config['training']['test_size'],
+    "PRETRAINED_MODEL": config['training']['pretrained_model'],
+    
+    # Experiment tracking
+    "PROJECT_NAME": config['experiment']['project_name'],
+    "WANDB_API_KEY": config['experiment']['wandb_api_key'],
+    "CKPT_NAME": config['experiment']['ckpt_name']
+}
 
 # ----- Load Dataset -----
-data_home = '../../../datasets/'
+carn = mirdata.initialize('compmusic_carnatic_rhythm', version='full_dataset_1.0', data_home=data_home)
+#carn.download(['index'])
+print('Validating dataset...')
+mis, inv = carn.validate()
 
-carn = mirdata.initialize('compmusic_carnatic_rhythm', version='full_dataset_1.0', data_home=data_home, )
-carn.download(['index'])
-#carn.download() # run once and comment line
-#carn.validate()
+if mis != {'tracks': {}}:
+    print("Error: Dataset validation failed due to missing files.")
+    print("Please ensure the data is in the correct location and the dataset is complete.")
+    print(f"Place the 'CMR_full_dataset_1.0' folder in {data_home}")
+    sys.exit(1)
+    
 carn_tracks = carn.load_tracks()
 carn_keys = list(carn_tracks.keys())
 
@@ -43,161 +99,179 @@ if torch.cuda.is_available():
 else:
     device = torch.device("cpu")
     accelerator = "cpu" 
-    
-num_workers = 0  # Set to 0 for cpu
 
-# ----- Set Training Parameters -----
-train_fold = 2
-test_fold = 1
+num_workers = PARAMS['NUM_WORKERS']
 
-PARAMS = {
-    "LEARNING_RATE": 0.005,
-    "N_FILTERS": 20,
-    "KERNEL_SIZE": 5,
-    "DROPOUT": 0.15,
-    "N_DILATIONS": 11,
-    "N_EPOCHS": 50,
-    "LOSS": "BCE",
-    "POST_PROCESSOR": "JOINT"
-}
+# ----- WandB Setup -----
 
-# ----- Set seeds -----
-for run, seed in enumerate([42, 52, 62], start=1):
-#seed = 62      
-#run=3
-
-    # Set random seed for reproducibility
-    L.seed_everything(seed, workers=True)
-
-    # ----- Load Splits -----
-    csv_path = os.path.join(ROOT, 'data', 'cmr_splits.csv')
-
-    carn_train_keys, carn_val_keys, carn_test_keys = carn_split_keys(
-                                                            csv_path=csv_path,
-                                                            train_fold=train_fold,
-                                                            test_fold=test_fold,
-                                                            split_col='Taala',
-                                                            test_size=0.2,
-                                                            seed=seed,
-                                                            reorder=True
-                                                        )
-
-
-
-    # Prepare datasets and loaders
-    train_data = BeatData(carn_tracks, carn_train_keys, widen=True)
-    val_data = BeatData(carn_tracks, carn_val_keys, widen=True)
-    test_data = BeatData(carn_tracks, carn_test_keys, widen=True)
-
-    train_loader = DataLoader(train_data, batch_size=1, num_workers=num_workers)
-    val_loader = DataLoader(val_data, batch_size=1, num_workers=num_workers)
-    test_loader = DataLoader(test_data, batch_size=1, num_workers=num_workers)
-
-    # ----- Model and Lightning Module -----
-    tcn = MultiTracker(
-        n_filters=PARAMS["N_FILTERS"],
-        n_dilations=PARAMS["N_DILATIONS"],
-        kernel_size=PARAMS["KERNEL_SIZE"],
-        dropout_rate=PARAMS["DROPOUT"]
-    )
-
-    # Load the model from checkpoint if available
-    ft_ckpt_name = "tcn_gtzan.ckpt"
-    ft_ckpt_path = os.path.join(ROOT, 'pretrained', ft_ckpt_name)
-    if not os.path.exists(ft_ckpt_path):
-        raise FileNotFoundError(f"Checkpoint file not found: {ft_ckpt_path}")
-    
-    
-    model = PLTCN.load_from_checkpoint(
-        ft_ckpt_path,
-        model=tcn,
-        params=PARAMS
-    )
-    model = model.to(device)
-
-    # ----- Callbacks -----
-    timestamp = datetime.now().strftime("%Y%m%d%H%M")
-    ckpt_name = f"tcn_carnatic_ft"
-
-    CKPTS_DIR = os.path.join(ROOT, 'output', 'checkpoints', timestamp)
-    os.makedirs(CKPTS_DIR, exist_ok=True)
-
-    checkpoint_callback = ModelCheckpoint(
-        dirpath=CKPTS_DIR,
-        filename=f"{ckpt_name}-trainfold{train_fold}-run{run}" + "-{epoch:02d} -{val_loss:.3f}",
-        monitor="val_loss",
-        save_top_k=1,
-        mode="min",
-        auto_insert_metric_name=False,
-        save_last=True
-    )
-
-    early_stop_callback = EarlyStopping(
-        monitor="val_loss",
-        patience=10,       # stop training if no improvement for 10 epochs
-        mode="min",
-        min_delta=1e-4,  # minimum change to qualify as an improvement
-        verbose=True
-    )
-
-    # ----- Loggers -----
-
-    run_config = PARAMS.copy()
-    run_config.update({
-        "FOLD": train_fold,
-        "RUN_ID": run,
-        "SEED": seed
-    })
-
-    wandb.login(key='40ce66ff8d453431f4c75ca162a50b37f7f0f1e1')
-    wandb_run = wandb.init(
-        project="TCN_Carnatic_FT_50",
-        name=f"TCN_carnatic_FT_{timestamp}_trainfold{train_fold}_run{run}_seed{seed}",
-        config=run_config,
-    )
-
-    wandb_logger = WandbLogger(experiment=wandb_run)
-    csv_logger = CSVLogger("lightning_logs")  # this gives you metrics.csv
-
-
-    # ----- Trainer -----
-    trainer = L.Trainer(
-        max_epochs=PARAMS["N_EPOCHS"],
-        accelerator=accelerator,
-        gradient_clip_val=0.5,
-        callbacks=[checkpoint_callback, early_stop_callback],
-        logger=[csv_logger, wandb_logger]  # explicitly include both
-    )
-
-    # ----- Train -----
-
-    start_time = time.time()
-    trainer.fit(model, train_loader, val_loader)
-    end_time = time.time()
-
-
-    train_duration = end_time - start_time
-    # Format as HH:MM:SS
-    hours, rem = divmod(train_duration, 3600)
-    minutes, seconds = divmod(rem, 60)
-    time_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
-    print(f"Total training time: {time_str} (hh:mm:ss)")
-
-    # Log training time to W&B
-    wandb.log({"train_time_sec": train_duration})
-
-    # ----- Copy Train Logs -----
+if args.disable_wandb:
+    #os.environ["WANDB_MODE"] = "disabled"
+    print("WandB logging disabled")
+else:
     try:
-        metrics_src = os.path.join(csv_logger.log_dir, "metrics.csv")
+        wandb.login(key=PARAMS["WANDB_API_KEY"])
+        print("WandB logging enabled")
+    except Exception as e:
+        print(f"WandB login failed: {e}")
+        args.disable_wandb = True
 
-        # Target path: output/checkpoints/<timestamp>/metrics.csv
-        metrics_dest = os.path.join(CKPTS_DIR, "metrics.csv")
+# ----- Training Loop -----
 
-        # Copy it
-        shutil.copyfile(metrics_src, metrics_dest)
-        print(f"Copied Lightning metrics.csv to: {metrics_dest}")
+for train_fold in [1,2]:
+    test_fold = 3 - train_fold  # if train_fold is 1, test_fold is 2 and vice versa
+
+    # ----- Set seeds -----
+    for run, seed in enumerate([42, 52, 62], start=1):
+        print(f"Running train fold {train_fold}, run {run} with seed {seed}")
         
-    finally:
-        # Clean up the wandb run directory
-        wandb_run.finish()
-        print("Wandb run finished")
+        # Set random seed for reproducibility
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        L.seed_everything(seed, workers=True)
+        
+        # ----- Load Splits -----
+        csv_path = os.path.join(ROOT, 'data', 'cmr_splits.csv')
+        
+        carn_train_keys, carn_val_keys, carn_test_keys = carn_split_keys(
+                                                                csv_path=csv_path,
+                                                                train_fold=train_fold,
+                                                                test_fold=test_fold,
+                                                                split_col='Taala',
+                                                                test_size=PARAMS['TEST_SIZE'],
+                                                                seed=seed,
+                                                                reorder=True
+                                                            )
+        print(f"Train keys: {len(carn_train_keys)}, Val keys: {len(carn_val_keys)}, Test keys: {len(carn_test_keys)}")
+
+        # Prepare datasets and loaders
+        train_data = BeatData(carn_tracks, carn_train_keys, widen=True)
+        val_data = BeatData(carn_tracks, carn_val_keys, widen=True)
+        test_data = BeatData(carn_tracks, carn_test_keys, widen=True)
+
+        train_loader = DataLoader(train_data, batch_size=PARAMS['BATCH_SIZE'], num_workers=num_workers)
+        val_loader = DataLoader(val_data, batch_size=PARAMS['BATCH_SIZE'], num_workers=num_workers)
+        test_loader = DataLoader(test_data, batch_size=PARAMS['BATCH_SIZE'], num_workers=num_workers)
+
+        # ----- Model and Lightning Module -----
+        tcn = MultiTracker(
+            n_filters=PARAMS["N_FILTERS"],
+            n_dilations=PARAMS["N_DILATIONS"],
+            kernel_size=PARAMS["KERNEL_SIZE"],
+            dropout_rate=PARAMS["DROPOUT"]
+        )
+
+        # Load the model from checkpoint if available
+        ft_ckpt_name = PARAMS["PRETRAINED_MODEL"]
+        ft_ckpt_path = os.path.join(ROOT, 'pretrained', ft_ckpt_name)
+        if not os.path.exists(ft_ckpt_path):
+            raise FileNotFoundError(f"Checkpoint file not found: {ft_ckpt_path}")
+        
+        
+        model = PLTCN.load_from_checkpoint(
+            ft_ckpt_path,
+            model=tcn,
+            params=PARAMS
+        )
+
+        # ----- Callbacks -----
+        timestamp = datetime.now().strftime("%Y%m%d%H%M")
+        ckpt_name = PARAMS["CKPT_NAME"]
+
+        CKPTS_DIR = os.path.join(ROOT, 'output', 'checkpoints', timestamp)
+        os.makedirs(CKPTS_DIR, exist_ok=True)
+
+        checkpoint_callback = ModelCheckpoint(
+            dirpath=CKPTS_DIR,
+            filename=f"{ckpt_name}-trainfold{train_fold}-run{run}" + "-{epoch:02d} -{val_loss:.3f}",
+            monitor="val_loss",
+            save_top_k=1,
+            mode="min",
+            auto_insert_metric_name=False,
+            save_last=True
+        )
+
+        early_stop_callback = EarlyStopping(
+            monitor="val_loss",
+            patience=PARAMS["EARLY_STOP_PATIENCE"],    # minimum number of epochs with no improvement
+            mode="min",
+            min_delta=PARAMS["EARLY_STOP_MIN_DELTA"],  # minimum change to qualify as an improvement
+            verbose=True
+        )
+
+        # ----- Loggers -----
+
+        run_config = PARAMS.copy()
+        # Remove any existing wandb api key
+        if "WANDB_API_KEY" in run_config:
+            del run_config["WANDB_API_KEY"]
+        run_config.update({
+            "RUN_ID": run,
+            "SEED": seed,
+            "TRAIN_FOLD": train_fold,
+            "TEST_FOLD": test_fold
+        })
+
+        wandb_logger = None
+        wandb_run = None
+        
+        if not args.disable_wandb:
+            #wandb.login(key=PARAMS["WANDB_API_KEY"])
+            wandb_run = wandb.init(
+                project=PARAMS["PROJECT_NAME"],
+                name=f"{PARAMS['PROJECT_NAME']}_{timestamp}_trainfold{train_fold}_run{run}_seed{seed}",
+                config=run_config,
+                reinit='create_new',        
+            )
+            wandb_logger = WandbLogger(experiment=wandb_run)
+
+        csv_logger = CSVLogger("lightning_logs") # this gives you metrics.csv
+
+        loggers = [csv_logger]
+        if wandb_logger:
+            loggers.append(wandb_logger)
+
+
+        # ----- Trainer -----
+        trainer = L.Trainer(
+            max_epochs=PARAMS["N_EPOCHS"],
+            accelerator=accelerator,
+            gradient_clip_val=0.5,
+            callbacks=[checkpoint_callback, early_stop_callback],
+            logger=loggers
+        )
+
+        # ----- Train -----
+        try:
+            start_time = time.time()
+            trainer.fit(model, train_loader, val_loader)
+            end_time = time.time()
+
+            train_duration = end_time - start_time
+            # Format as HH:MM:SS
+            hours, rem = divmod(train_duration, 3600)
+            minutes, seconds = divmod(rem, 60)
+            time_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+            print(f"Total training time: {time_str} (hh:mm:ss)")
+
+            # Log training time to W&B
+            if wandb_run:
+                wandb.log({"train_time_sec": train_duration})
+
+        finally:
+            # Always finish the wandb run if it was created
+            if wandb_run:
+                wandb_run.finish()
+                print("Wandb run finished")
+                
+        # ----- Copy Train Logs -----
+        try:
+            metrics_src = os.path.join(csv_logger.log_dir, "metrics.csv")
+            metrics_dest = os.path.join(CKPTS_DIR, "metrics.csv")
+            shutil.copyfile(metrics_src, metrics_dest)
+            print(f"Copied Lightning metrics.csv to: {metrics_dest}")
+        except Exception as e:
+            print(f"Failed to copy metrics.csv: {e}")
+
+print(f"Training completed successfully!")
