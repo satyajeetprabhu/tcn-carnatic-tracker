@@ -28,30 +28,40 @@ import numpy as np
 import random
 
 
-# ----- Argument Parsing and Configuration -----
+# ----- Argument Parsing -----
 
 parser = argparse.ArgumentParser(description='Train TCN model on multiple datasets')
-parser.add_argument('--data_home', type=str, default='../data/',
+parser.add_argument('--data_home', type=str, default='../data',
                     help='Path to the mounted datasets directory')
 parser.add_argument('--datasets', nargs='+', 
                     default=['gtzan_genre', 'beatles', 'ballroom', 
                             'rwc_popular', 'rwc_jazz', 'rwc_classical'],
                     help='Datasets to include in training')
+parser.add_argument('--config', type=str, default='train_BL.yaml',
+                    help='Path to configuration file')
 parser.add_argument('--disable-wandb', action='store_true',
-                    help='Disable WandB logging')
+                    help='Disable WandB logging for trial run')
 args = parser.parse_args()
 
-# Verify the data_home exists
 data_home = args.data_home
+
+# Verify the data_home exists
 if not os.path.exists(data_home):
     raise FileNotFoundError(f"Data home directory not found: {data_home}")
 
 # Load configuration
-with open('config/config_BL.yaml', 'r') as f:
+with open(args.config, 'r') as f:
     config = yaml.safe_load(f)
     
 print(f"Using data home: {data_home}")
-print(f"Using config file: config/train_BL.yaml")
+print(f"Using config file: {args.config}")
+
+# Set WandB mode based on the flag
+if args.disable_wandb:
+    os.environ["WANDB_MODE"] = "disabled"
+    print("WandB logging disabled")
+else:
+    print("WandB logging enabled")
 
 # ----- Set Training Parameters -----
 
@@ -71,8 +81,6 @@ PARAMS = {
     "NUM_WORKERS": config['training']['num_workers'],
     "EARLY_STOP_PATIENCE": config['training']['early_stop_patience'],
     "EARLY_STOP_MIN_DELTA": config['training']['early_stop_min_delta'],
-    "SCHEDULER_FACTOR": config['training']['scheduler_factor'],
-    "SCHEDULER_PATIENCE": config['training']['scheduler_patience'],
     "TEST_SIZE": config['training']['test_size'],
     
     # Experiment tracking
@@ -104,6 +112,7 @@ for name, stats in summary.items():
         print(f"{name}: {stats['valid_tracks']}/{stats['total_tracks']} "
               f"({stats['valid_ratio']:.2%} valid)")
 
+
 # ----- Device Setup -----
 if torch.cuda.is_available():
     device = torch.device("cuda")
@@ -114,16 +123,10 @@ else:
 
 num_workers = PARAMS['NUM_WORKERS']
 
-# ----- WandB Setup -----
-if args.disable_wandb:
-    #os.environ["WANDB_MODE"] = "disabled"
-    print("WandB logging disabled")
-else:
-    wandb.login(key=PARAMS["WANDB_API_KEY"])
-    print("WandB logging enabled")
-    
 # ----- Set seeds -----
 for run, seed in enumerate([42, 52, 62], start=1):
+    
+    print(f"Running run {run} with seed {seed}")
 
     # Set random seed for reproducibility
     random.seed(seed)
@@ -188,7 +191,7 @@ for run, seed in enumerate([42, 52, 62], start=1):
 
     early_stop_callback = EarlyStopping(
         monitor="val_loss",
-        patience=PARAMS["EARLY_STOP_PATIENCE"],   # minimum number of epochs with no improvement
+        patience=PARAMS["EARLY_STOP_PATIENCE"],       # stop training if no improvement for 20 epochs
         mode="min",
         min_delta=PARAMS["EARLY_STOP_MIN_DELTA"],  # minimum change to qualify as an improvement
         verbose=True
@@ -205,24 +208,19 @@ for run, seed in enumerate([42, 52, 62], start=1):
         "SEED": seed
     })
 
-    wandb_logger = None
-    wandb_run = None
-    
-    if not args.disable_wandb:
-        #wandb.login(key=PARAMS["WANDB_API_KEY"])
-        wandb_run = wandb.init(
-            project=PARAMS["PROJECT_NAME"],
-            name=f"{PARAMS['PROJECT_NAME']}_{timestamp}_run{run}_seed{seed}",
-            config=run_config,
-            reinit='create_new',        
-        )
-        wandb_logger = WandbLogger(experiment=wandb_run)
+    wandb.login(key=PARAMS["WANDB_API_KEY"])
+    wandb_run = wandb.init(
+        project=PARAMS["PROJECT_NAME"],
+        name=f"{PARAMS['PROJECT_NAME']}_{timestamp}_run{run}_seed{seed}",
+        config=run_config,
+        reinit='finish_previous',
+        mode="disabled" if args.disable_wandb else "online",
+        
+    )
 
-    csv_logger = CSVLogger("lightning_logs") # this gives you metrics.csv
+    wandb_logger = WandbLogger(experiment=wandb_run)
+    csv_logger = CSVLogger("lightning_logs")  # this gives you metrics.csv
 
-    loggers = [csv_logger]
-    if wandb_logger:
-        loggers.append(wandb_logger)
 
     # ----- Trainer -----
     trainer = L.Trainer(
@@ -230,40 +228,51 @@ for run, seed in enumerate([42, 52, 62], start=1):
         accelerator=accelerator,
         gradient_clip_val=0.5,
         callbacks=[checkpoint_callback, early_stop_callback],
-        logger=loggers
+        logger=[csv_logger, wandb_logger]  # explicitly include both
     )
 
     # ----- Train -----
-    try:
-        start_time = time.time()
-        trainer.fit(model, train_loader, val_loader)
-        end_time = time.time()
+    start_time = time.time()
+    trainer.fit(model, train_loader, val_loader)
+    end_time = time.time()
 
-        train_duration = end_time - start_time
-        # Format as HH:MM:SS
-        hours, rem = divmod(train_duration, 3600)
-        minutes, seconds = divmod(rem, 60)
-        time_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
-        print(f"Total training time: {time_str} (hh:mm:ss)")
 
-        # Log training time to W&B
-        if wandb_run:
-            wandb.log({"train_time_sec": train_duration})
+    train_duration = end_time - start_time
+    # Format as HH:MM:SS
+    hours, rem = divmod(train_duration, 3600)
+    minutes, seconds = divmod(rem, 60)
+    time_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+    print(f"Total training time: {time_str} (hh:mm:ss)")
 
-    finally:
-        # Always finish the wandb run if it was created
-        if wandb_run:
-            wandb_run.finish()
-            print("Wandb run finished")
-            
+    # Log training time to W&B
+    wandb.log({"train_time_sec": train_duration})
+
     # ----- Copy Train Logs -----
     try:
         metrics_src = os.path.join(csv_logger.log_dir, "metrics.csv")
+
+        # Target path: output/checkpoints/<timestamp>/metrics.csv
         metrics_dest = os.path.join(CKPTS_DIR, "metrics.csv")
+
+        # Copy it
         shutil.copyfile(metrics_src, metrics_dest)
         print(f"Copied Lightning metrics.csv to: {metrics_dest}")
-    except Exception as e:
-        print(f"Failed to copy metrics.csv: {e}")
+        
+        # Copy the generated checkpoint into the pretrained folder
+        latest_ckpt = checkpoint_callback.best_model_path
+        pretrained_dir = os.path.join(ROOT, 'pretrained', 'tcn_bl')
+        os.makedirs(pretrained_dir, exist_ok=True)
+        shutil.copyfile(latest_ckpt, os.path.join(pretrained_dir, f"{ckpt_name}-run{run}.ckpt"))
+        print(f"Copied checkpoint to: {os.path.join(pretrained_dir, f'{ckpt_name}-run{run}.ckpt')}")
 
+    except Exception as e:
+        print(f"Warning: Failed to copy checkpoint to the 'pretrained' folder: {e}. You can still find it in the output/checkpoints/<timestamp> folder.")
+        print("Training will continue...")
+        
+    finally:
+        # Clean up the wandb run directory
+        wandb_run.finish()
+        print("Wandb run finished")
+        
 print(f"Training completed successfully!")
-            
+        

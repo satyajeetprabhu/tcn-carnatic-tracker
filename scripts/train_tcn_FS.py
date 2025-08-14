@@ -104,23 +104,19 @@ num_workers = PARAMS['NUM_WORKERS']
 # ----- WandB Setup -----
 
 if args.disable_wandb:
-    #os.environ["WANDB_MODE"] = "disabled"
+    os.environ["WANDB_MODE"] = "disabled"
     print("WandB logging disabled")
 else:
-    try:
-        wandb.login(key=PARAMS["WANDB_API_KEY"])
-        print("WandB logging enabled")
-    except Exception as e:
-        print(f"WandB login failed: {e}")
-        args.disable_wandb = True
+    print("WandB logging enabled")
     
 # ----- Training Loop -----
 
 for train_fold in [1,2]:
-    test_fold = 3 - train_fold  # if train_fold is 1, test_fold is 2 and vice versa
+    test_fold = 3 - train_fold   # When train_fold is 1, test_fold is 2 and vice versa
 
     # ----- Set seeds -----
     for run, seed in enumerate([42, 52, 62], start=1):
+        
         print(f"Running train fold {train_fold}, run {run} with seed {seed}")
         
         # Set random seed for reproducibility
@@ -202,24 +198,18 @@ for train_fold in [1,2]:
             "TEST_FOLD": test_fold
         })
 
-        wandb_logger = None
-        wandb_run = None
-        
-        if not args.disable_wandb:
-            #wandb.login(key=PARAMS["WANDB_API_KEY"])
-            wandb_run = wandb.init(
-                project=PARAMS["PROJECT_NAME"],
-                name=f"{PARAMS['PROJECT_NAME']}_{timestamp}_trainfold{train_fold}_run{run}_seed{seed}",
-                config=run_config,
-                reinit='create_new',        
-            )
-            wandb_logger = WandbLogger(experiment=wandb_run)
+        wandb.login(key=PARAMS["WANDB_API_KEY"])
+        wandb_run = wandb.init(
+            project=PARAMS["PROJECT_NAME"],
+            name=f"{PARAMS['PROJECT_NAME']}_{timestamp}_trainfold{train_fold}_run{run}_seed{seed}",
+            config=run_config,
+            reinit='finish_previous',
+            mode="disabled" if args.disable_wandb else "online",
+            
+        )
 
-        csv_logger = CSVLogger("lightning_logs") # this gives you metrics.csv
-
-        loggers = [csv_logger]
-        if wandb_logger:
-            loggers.append(wandb_logger)
+        wandb_logger = WandbLogger(experiment=wandb_run)
+        csv_logger = CSVLogger("lightning_logs")  # this gives you metrics.csv
 
 
         # ----- Trainer -----
@@ -228,39 +218,50 @@ for train_fold in [1,2]:
             accelerator=accelerator,
             gradient_clip_val=0.5,
             callbacks=[checkpoint_callback, early_stop_callback],
-            logger=loggers
+            logger=[csv_logger, wandb_logger]  # explicitly include both
         )
 
         # ----- Train -----
-        try:
-            start_time = time.time()
-            trainer.fit(model, train_loader, val_loader)
-            end_time = time.time()
+        start_time = time.time()
+        trainer.fit(model, train_loader, val_loader)
+        end_time = time.time()
 
-            train_duration = end_time - start_time
-            # Format as HH:MM:SS
-            hours, rem = divmod(train_duration, 3600)
-            minutes, seconds = divmod(rem, 60)
-            time_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
-            print(f"Total training time: {time_str} (hh:mm:ss)")
 
-            # Log training time to W&B
-            if wandb_run:
-                wandb.log({"train_time_sec": train_duration})
+        train_duration = end_time - start_time
+        # Format as HH:MM:SS
+        hours, rem = divmod(train_duration, 3600)
+        minutes, seconds = divmod(rem, 60)
+        time_str = f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+        print(f"Total training time: {time_str} (hh:mm:ss)")
 
-        finally:
-            # Always finish the wandb run if it was created
-            if wandb_run:
-                wandb_run.finish()
-                print("Wandb run finished")
+        # Log training time to W&B
+        wandb.log({"train_time_sec": train_duration})
                 
         # ----- Copy Train Logs -----
         try:
             metrics_src = os.path.join(csv_logger.log_dir, "metrics.csv")
+
+            # Target path: output/checkpoints/<timestamp>/metrics.csv
             metrics_dest = os.path.join(CKPTS_DIR, "metrics.csv")
+
+            # Copy it
             shutil.copyfile(metrics_src, metrics_dest)
             print(f"Copied Lightning metrics.csv to: {metrics_dest}")
+            
+            # Copy the generated checkpoint into the pretrained folder
+            latest_ckpt = checkpoint_callback.best_model_path
+            pretrained_dir = os.path.join(ROOT, 'pretrained', 'tcn_carnatic_fs')
+            os.makedirs(pretrained_dir, exist_ok=True)
+            shutil.copyfile(latest_ckpt, os.path.join(pretrained_dir, f"{ckpt_name}-trainfold{train_fold}-run{run}.ckpt"))
+            print(f"Copied checkpoint to: {os.path.join(pretrained_dir, f'{ckpt_name}-trainfold{train_fold}-run{run}.ckpt')}")
+
         except Exception as e:
-            print(f"Failed to copy metrics.csv: {e}")
+            print(f"Warning: Failed to copy checkpoint to the 'pretrained' folder: {e}. You can still find it in the output/checkpoints/<timestamp> folder.")
+            print("Training will continue...")
+            
+        finally:
+            # Clean up the wandb run directory
+            wandb_run.finish()
+            print("Wandb run finished")
 
 print(f"Training completed successfully!")

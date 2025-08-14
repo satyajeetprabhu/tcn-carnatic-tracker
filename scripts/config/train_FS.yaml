@@ -28,5 +28,5 @@ training:
 # Experiment Tracking
 experiment:
   project_name: "TCN_FS"
-  wandb_api_key: "40ce66ff8d453431f4c75ca162a50b37f7f0f1e1"
+  wandb_api_key: "your_wandb_api_key"
   ckpt_name: "tcn_carnatic_fs"
