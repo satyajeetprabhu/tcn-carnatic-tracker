@@ -37,8 +37,6 @@ parser.add_argument('--datasets', nargs='+',
                     default=['gtzan_genre', 'beatles', 'ballroom', 
                             'rwc_popular', 'rwc_jazz', 'rwc_classical'],
                     help='Datasets to include in training')
-parser.add_argument('--config', type=str, default='train_BL.yaml',
-                    help='Path to configuration file')
 parser.add_argument('--disable-wandb', action='store_true',
                     help='Disable WandB logging for trial run')
 args = parser.parse_args()
@@ -50,11 +48,14 @@ if not os.path.exists(data_home):
     raise FileNotFoundError(f"Data home directory not found: {data_home}")
 
 # Load configuration
-with open(args.config, 'r') as f:
+with open('config/train_BL.yaml', 'r') as f:
     config = yaml.safe_load(f)
+with open('config/model.yaml', 'r') as f:
+            model_config = yaml.safe_load(f)
+config['model'] = model_config['model']
     
 print(f"Using data home: {data_home}")
-print(f"Using config file: {args.config}")
+print(f"Using config file: config/train_BL.yaml")
 
 # Set WandB mode based on the flag
 if args.disable_wandb:
@@ -67,20 +68,22 @@ else:
 
 PARAMS = {
     # Model parameters
-    "LEARNING_RATE": config['training']['learning_rate'],
     "N_FILTERS": config['model']['n_filters'],
     "KERNEL_SIZE": config['model']['kernel_size'],
     "DROPOUT": config['model']['dropout'],
     "N_DILATIONS": config['model']['n_dilations'],
+    
+    # Training configuration
+    "LEARNING_RATE": config['training']['learning_rate'],
     "N_EPOCHS": config['training']['n_epochs'],
     "LOSS": config['training']['loss'],
     "POST_PROCESSOR": config['training']['post_processor'],
-    
-    # Training configuration
     "BATCH_SIZE": config['training']['batch_size'],
     "NUM_WORKERS": config['training']['num_workers'],
     "EARLY_STOP_PATIENCE": config['training']['early_stop_patience'],
     "EARLY_STOP_MIN_DELTA": config['training']['early_stop_min_delta'],
+    "SCHEDULER_FACTOR": config['training']['scheduler_factor'],
+    "SCHEDULER_PATIENCE": config['training']['scheduler_patience'],
     "TEST_SIZE": config['training']['test_size'],
     
     # Experiment tracking
@@ -275,4 +278,3 @@ for run, seed in enumerate([42, 52, 62], start=1):
         print("Wandb run finished")
         
 print(f"Training completed successfully!")
-        

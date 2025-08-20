@@ -3,16 +3,12 @@ import os
 import pickle
 import lightning as L
 import torch
-import torch.nn.functional as F
-import mir_eval
-import numpy as np
 import time
 
-
-from utils.visualisation import plot_audio, plot_spec, plot_activations
-from loss.loss import loss_bce, loss_relative, loss_weighted  # import your loss here
+from loss.loss import loss_bce, loss_relative, loss_weighted
 from post.dbn import beat_tracker, joint_tracker, sequential_tracker
 from eval.metrics import all_metrics, flatten_dict
+from utils.visualisation import plot_spec
 
 class PLTCN(L.LightningModule):
     
@@ -21,8 +17,6 @@ class PLTCN(L.LightningModule):
         self.model = model
         self.loss_name = params["LOSS"]
         self.loss_fn = self._get_loss_fn()
-        #self.beat_fmeasure = []
-        #self.downbeat_fmeasure = []
         self.all_results = []
         self.learning_rate = params["LEARNING_RATE"]
         self.scheduler_factor = params["SCHEDULER_FACTOR"]
@@ -143,6 +137,23 @@ class PLTCN(L.LightningModule):
         downbeats_act = output["downbeats"].squeeze().detach().cpu().numpy()
         beats_prediction, downbeats_prediction = self.post_tracker(beats_act, downbeats_act)
 
+        # Optionally, plot the first example
+        '''
+        if batch_idx == 0:
+
+            sr = batch["sr"].detach().cpu().item()
+            audio = batch["audio"].squeeze().detach().cpu().numpy()
+            
+            plot_spec(                
+                audio=audio,
+                beat_ann=beats_target,
+                db_ann=downbeats_target,
+                beat_det=beats_prediction,
+                db_det=downbeats_prediction,
+                sr=sr
+            )
+        '''
+        
         beat_scores = all_metrics(beats_target, beats_prediction)
         downbeat_scores = all_metrics(downbeats_target, downbeats_prediction)
 

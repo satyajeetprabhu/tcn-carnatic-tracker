@@ -8,8 +8,8 @@ fps= 100  # frames per second for the DBN processors
 
 def beat_tracker(beats_act, downbeats_act):
     beat_dbn = DBNBeatTrackingProcessor(
-        min_bpm=55.0, max_bpm=215.0, fps=fps, transition_lambda=100, online=False)
-            
+        min_bpm=55.0, max_bpm=230.0, fps=fps, transition_lambda=100, online=False)
+
     if beats_act.size > 1:
         beats_pred = beat_dbn(beats_act)
         return beats_pred, np.array([])  # No downbeats in this tracker
@@ -20,7 +20,7 @@ def beat_tracker(beats_act, downbeats_act):
 def joint_tracker(beats_act, downbeats_act):
     
     downbeat_tracker = DBNDownBeatTrackingProcessor(
-                        beats_per_bar=[3, 5, 7, 8], min_bpm=55.0, max_bpm=300.0, fps=100)
+                        beats_per_bar=[3, 5, 7, 8], min_bpm=55.0, max_bpm=230.0, fps=100)
 
     
     combined_act = np.vstack((np.maximum(beats_act - downbeats_act, 0), downbeats_act)).T

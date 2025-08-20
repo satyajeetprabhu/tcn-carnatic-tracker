@@ -1,0 +1,6 @@
+# Model Parameters
+model:
+  n_filters: 20
+  kernel_size: 5
+  dropout: 0.15
+  n_dilations: 11

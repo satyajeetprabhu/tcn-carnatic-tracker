@@ -1,4 +1,3 @@
-from glob import glob
 import os
 import sys
 import shutil
@@ -45,6 +44,9 @@ if not os.path.exists(data_home):
 # Load configuration
 with open('config/train_FT.yaml', 'r') as f:
     config = yaml.safe_load(f)
+with open('config/model.yaml', 'r') as f:
+            model_config = yaml.safe_load(f)
+config['model'] = model_config['model']
     
 print(f"Using data home: {data_home}")
 print(f"Using config file: config/train_FT.yaml")
@@ -53,16 +55,16 @@ print(f"Using config file: config/train_FT.yaml")
 
 PARAMS = {
     # Model parameters
-    "LEARNING_RATE": config['training']['learning_rate'],
     "N_FILTERS": config['model']['n_filters'],
     "KERNEL_SIZE": config['model']['kernel_size'],
     "DROPOUT": config['model']['dropout'],
     "N_DILATIONS": config['model']['n_dilations'],
+    
+    # Training configuration
+    "LEARNING_RATE": config['training']['learning_rate'],
     "N_EPOCHS": config['training']['n_epochs'],
     "LOSS": config['training']['loss'],
     "POST_PROCESSOR": config['training']['post_processor'],
-    
-    # Training configuration
     "BATCH_SIZE": config['training']['batch_size'],
     "NUM_WORKERS": config['training']['num_workers'],
     "EARLY_STOP_PATIENCE": config['training']['early_stop_patience'],

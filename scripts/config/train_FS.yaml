@@ -1,10 +1,3 @@
-# Model Parameters
-model:
-  n_filters: 20
-  kernel_size: 5
-  dropout: 0.15
-  n_dilations: 11
-
 # Training Configuration
 training:
   learning_rate: 0.005
@@ -12,7 +5,7 @@ training:
   loss: "BCE"
   post_processor: "JOINT"
   batch_size: 1
-  num_workers: 4
+  num_workers: 0
   
   # Early stopping
   early_stop_patience: 20
