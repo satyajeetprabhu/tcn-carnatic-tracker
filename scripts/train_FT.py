@@ -42,10 +42,10 @@ if not os.path.exists(data_home):
     raise FileNotFoundError(f"Data home directory not found: {data_home}")
 
 # Load configuration
-with open('config/train_FT.yaml', 'r') as f:
+with open('../config/train_FT.yaml', 'r') as f:
     config = yaml.safe_load(f)
-with open('config/model.yaml', 'r') as f:
-            model_config = yaml.safe_load(f)
+with open('../config/model.yaml', 'r') as f:
+    model_config = yaml.safe_load(f)
 config['model'] = model_config['model']
     
 print(f"Using data home: {data_home}")

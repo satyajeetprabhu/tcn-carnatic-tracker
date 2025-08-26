@@ -38,9 +38,7 @@ class PLTCN(L.LightningModule):
         
     def _get_post_processor(self):
         
-        if self.post_processor == "BEAT":
-            return beat_tracker
-        elif self.post_processor == "JOINT":
+        if self.post_processor == "JOINT":
             return joint_tracker
         elif self.post_processor == "SEQUENTIAL":
             return sequential_tracker
@@ -135,24 +133,10 @@ class PLTCN(L.LightningModule):
         output = self(x)
         beats_act = output["beats"].squeeze().detach().cpu().numpy()
         downbeats_act = output["downbeats"].squeeze().detach().cpu().numpy()
-        beats_prediction, downbeats_prediction = self.post_tracker(beats_act, downbeats_act)
-
-        # Optionally, plot the first example
-        '''
-        if batch_idx == 0:
-
-            sr = batch["sr"].detach().cpu().item()
-            audio = batch["audio"].squeeze().detach().cpu().numpy()
-            
-            plot_spec(                
-                audio=audio,
-                beat_ann=beats_target,
-                db_ann=downbeats_target,
-                beat_det=beats_prediction,
-                db_det=downbeats_prediction,
-                sr=sr
-            )
-        '''
+        pred = self.post_tracker(beats_act, downbeats_act)
+        
+        beats_prediction = pred[:, 0]  
+        downbeats_prediction = pred[pred[:, 1] == 1][:, 0]
         
         beat_scores = all_metrics(beats_target, beats_prediction)
         downbeat_scores = all_metrics(downbeats_target, downbeats_prediction)

@@ -37,9 +37,9 @@ def parse_args():
 def get_params_paths(mode):
     """Get all checkpoint paths for the given mode."""
     if mode == 'BL':
-        with open('config/train_BL.yaml', 'r') as f:
+        with open('../config/train_BL.yaml', 'r') as f:
             config = yaml.safe_load(f)
-        with open('config/model.yaml', 'r') as f:
+        with open('../config/model.yaml', 'r') as f:
             model_config = yaml.safe_load(f)
         config['model'] = model_config['model']
         PARAMS = get_params(config)
@@ -49,9 +49,9 @@ def get_params_paths(mode):
         
 
     elif mode == 'FT':
-        with open('config/train_FT.yaml', 'r') as f:
+        with open('../config/train_FT.yaml', 'r') as f:
             config = yaml.safe_load(f)
-        with open('config/model.yaml', 'r') as f:
+        with open('../config/model.yaml', 'r') as f:
             model_config = yaml.safe_load(f)
         config['model'] = model_config['model']
         PARAMS = get_params(config)
@@ -60,9 +60,9 @@ def get_params_paths(mode):
         pattern = f'{ckpt_name}-*.ckpt'
 
     elif mode == 'FS':
-        with open('config/train_FS.yaml', 'r') as f:
+        with open('../config/train_FS.yaml', 'r') as f:
             config = yaml.safe_load(f)
-        with open('config/model.yaml', 'r') as f:
+        with open('../config/model.yaml', 'r') as f:
             model_config = yaml.safe_load(f)
         config['model'] = model_config['model']            
         PARAMS = get_params(config)
