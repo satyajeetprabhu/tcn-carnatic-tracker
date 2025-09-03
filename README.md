@@ -150,6 +150,8 @@ pred = model.predict("/path/to/audio.wav")
 
 ## Notebooks
 
+The notebooks provided contain the code to generate all the analysis and plots presented in the thesis.
+
 - `notebooks/dataset_analysis.ipynb`: Dataset statistics and inspection.
 - `notebooks/outlier_analysis.ipynb`: Outlier exploration.
 - `notebooks/tempo_analysis.ipynb`: Tempo-focused analysis.
