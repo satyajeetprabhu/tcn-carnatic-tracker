@@ -3,4 +3,3 @@
 **/lightning_logs/
 **/wandb/
 **/.ipynb_checkpoints/
-scripts/infer_batch.py
