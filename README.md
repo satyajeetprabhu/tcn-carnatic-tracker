@@ -1,6 +1,6 @@
 # TCN Carnatic Tracker
 
-This repository is a companion to the Master's thesis "Revisiting Meter Tracking in Carnatic Music using Deep Learning Approaches," submitted towards a Master in Sound and Music Computing at Universitat Pompeu Fabra (August 2025). It includes an implementation of Temporal Convolutional Network (TCN) for beat and downbeat tracking, with baselines (TCN_BL), from-scratch (TCN-FS) and fine-tuning (TCN-FT) setups for the CompMusic Carnatic Music Rhythm Dataset (CMR). The code can be used to reproduce the study's results; pretrained checkpoints and their evaluation reported in the study are provided under `pretrained/` and `output/results/` respectively.
+This repository is a companion to the Master's thesis ["Revisiting Meter Tracking in Carnatic Music using Deep Learning Approaches"](https://arxiv.org/abs/2509.11241), submitted towards a Master in Sound and Music Computing at Universitat Pompeu Fabra (August 2025). It includes an implementation of Temporal Convolutional Network (TCN) for beat and downbeat tracking, with baselines (TCN_BL), from-scratch (TCN-FS) and fine-tuning (TCN-FT) setups for the CompMusic Carnatic Music Rhythm Dataset (CMR). The code can be used to reproduce the study's results; pretrained checkpoints and their evaluation reported in the study are provided under `pretrained/` and `output/results/` respectively.
 
 ## Contents
 - [Installation](#installation)
