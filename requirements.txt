@@ -10,3 +10,4 @@ mir_eval
 numpy==1.23.5
 matplotlib
 wandb
+ipython
