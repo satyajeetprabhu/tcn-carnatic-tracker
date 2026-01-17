@@ -8,7 +8,16 @@ fps= 100  # frames per second for the DBN processors
 min_bpm= 55.0
 max_bpm= 230.0
 
+epsilon = 1e-5
+
+def clip_probabilities(probs):
+    """Clip probabilities to avoid exact 0 and 1 values that cause DBN issues."""
+    probs = np.maximum(probs, 0)
+    probs = np.minimum(probs, 1)
+    return probs * (1 - epsilon) + epsilon / 2
+
 def beat_tracker(beats_act):
+    beats_act = clip_probabilities(beats_act)
     beat_dbn = DBNBeatTrackingProcessor(
         min_bpm=min_bpm, max_bpm=max_bpm, fps=fps, transition_lambda=100, online=False)
 
@@ -20,6 +29,8 @@ def beat_tracker(beats_act):
         return np.array([])
 
 def joint_tracker(beats_act, downbeats_act):
+    beats_act = clip_probabilities(beats_act)
+    downbeats_act = clip_probabilities(downbeats_act)
     
     downbeat_tracker = DBNDownBeatTrackingProcessor(
                         beats_per_bar=[3, 5, 7, 8], min_bpm=min_bpm, max_bpm=max_bpm, fps=fps)
@@ -30,6 +41,8 @@ def joint_tracker(beats_act, downbeats_act):
     return pred
 
 def sequential_tracker(beats_act, downbeats_act):
+    beats_act = clip_probabilities(beats_act)
+    downbeats_act = clip_probabilities(downbeats_act)
 
     beats = beat_tracker(beats_act)
 
