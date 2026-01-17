@@ -5,7 +5,7 @@ training:
   loss: "BCE"
   post_processor: "JOINT"
   batch_size: 1
-  num_workers: 4
+  num_workers: 0
   
   # Early stopping
   early_stop_patience: 10
