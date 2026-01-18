@@ -15,8 +15,6 @@ from torch.utils.data import DataLoader
 import mirdata
 import pandas as pd
 import numpy as np
-import warnings
-warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 import random
 
 from pre.data_loader import BeatData
@@ -24,6 +22,12 @@ from model.tcn import MultiTracker
 from model.lightning_module import PLTCN
 from utils.split_utils import carn_split_keys
 
+import warnings
+warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
+warnings.filterwarnings("ignore", category=FutureWarning, module="google.api_core")
+warnings.filterwarnings("ignore", module="lightning.fabric.utilities.cloud_io")
+warnings.filterwarnings("ignore", module="lightning.pytorch.trainer")
+warnings.filterwarnings("ignore", module="madmom")
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Evaluate TCN models with different modes')
