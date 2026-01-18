@@ -8,7 +8,12 @@ def all_metrics(gt_times, pred_times):
     # Compute the beat evaluation metrics
     scores = mir_eval.beat.evaluate(reference, estimated)
     
-    return scores
+    scores_final = {
+        k: scores[k] for k in ['F-measure', 'Correct Metric Level Total', 'Any Metric Level Total']
+        if k in scores
+    }
+    
+    return scores_final
 
 def flatten_dict(track_id, beat_scores, downbeat_scores):
     flat_result = {'track_id': track_id}
